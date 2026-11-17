@@ -323,7 +323,8 @@ const PAGES = {
               ${its(o).filter((i) => i.cancelled_qty).map((i) => `<tr class="muted"><td><s>${i.cancelled_qty} × ${esc(i.product_name)}</s> (retiré)</td><td></td><td class="num"><s>${fmt(i.cancelled_qty * i.unit_price)}</s></td></tr>`).join('')}</tbody></table>
               <p class="muted">Ouverte à ${fmtTime(o.opened_at)} · clôturée à ${fmtTime(o.closed_at)}${o.amount_received ? ` · reçu ${fmt(o.amount_received)}` : ''}</p>
               <div class="actions"><button class="btn sm" data-preview="${o.id}">Voir le ticket</button><button class="btn sm" data-print="${o.id}">Réimprimer</button>
-              ${o.status === 'paid' ? `<button class="btn sm danger-ghost" data-cancel="${o.id}">Annuler ce ticket</button>` : ''}</div></div>` : ''}
+              ${o.status === 'paid' ? `<button class="btn sm danger-ghost" data-cancel="${o.id}">${icon('ban', 16)} Annuler ce ticket</button>` : ''}
+              <button class="btn sm danger" data-delete="${o.id}">${icon('trash', 16)} Supprimer définitivement</button></div></div>` : ''}
           </div>`;
         }).join('') || '<p class="muted pad">Aucun ticket sur cette période.</p>'}</section>`;
     };
@@ -344,6 +345,22 @@ const PAGES = {
       if (pr) {
         try { await printDoc(buildOrderTicket({ settings: ctx.settings, order: find(pr.dataset.print), items: its(pr.dataset.print) })); }
         catch (err) { toast(`Impression impossible : ${err.message}`, 'error'); }
+        return;
+      }
+      const dl = t.closest('[data-delete]');
+      if (dl) {
+        const o = find(dl.dataset.delete);
+        const ok = await confirmDlg(
+          `Supprimer le ticket N° ${o.number}`,
+          `Le ticket N° ${o.number} du ${fmtDateTime(o.closed_at)} (${o.table_name || ''}, ${fmt(o.total)}) va être effacé avec tout son détail. Il disparaîtra du chiffre d'affaires et de l'historique. Cette action est irréversible. Pour garder une trace, utilisez plutôt « Annuler ce ticket ».`,
+          'Supprimer définitivement',
+          true,
+        );
+        if (!ok) return;
+        await db.remove('orders', o.id);
+        openId = null;
+        toast(`Ticket N° ${o.number} supprimé`, 'ok');
+        await draw();
         return;
       }
       const cc = t.closest('[data-cancel]');

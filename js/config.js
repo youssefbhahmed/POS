@@ -9,6 +9,7 @@
 //  (Project Settings → API). Voir README.md.
 // ─────────────────────────────────────────────────────────────
 export const CONFIG = {
-  SUPABASE_URL: '',
-  SUPABASE_ANON_KEY: '',
+  SUPABASE_URL: 'https://odjmgtltwtghwhmnhnmp.supabase.co',
+  // Clé « publishable » (publique par conception). Ne JAMAIS mettre la clé secrète ici.
+  SUPABASE_ANON_KEY: 'sb_publishable_obV5cz4flw6ByNTJ5IFVtg_VyE5NzQP',
 };

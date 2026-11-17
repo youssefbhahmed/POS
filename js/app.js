@@ -103,3 +103,30 @@ async function start() {
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }
+
+// Mise à jour automatique : la caisse reste ouverte toute la journée, on vérifie
+// toutes les 5 min si une nouvelle version a été publiée, et on recharge
+// uniquement quand personne n'est en train de saisir (écran des tables, aucune fenêtre).
+(function autoUpdate() {
+  let initial = null;
+  let pending = false;
+  const stamp = async () => {
+    const r = await fetch('index.html', { method: 'HEAD', cache: 'no-cache' });
+    return r.headers.get('etag') || r.headers.get('last-modified');
+  };
+  const idle = () =>
+    !document.querySelector('.modal-backdrop, .order-view, form#login') && document.visibilityState === 'visible';
+  const tryReload = () => {
+    if (pending && idle()) location.reload();
+  };
+  stamp().then((s) => (initial = s)).catch(() => {});
+  setInterval(async () => {
+    try {
+      const s = await stamp();
+      if (initial && s && s !== initial) pending = true;
+      else if (!initial) initial = s;
+    } catch {}
+    tryReload();
+  }, 5 * 60 * 1000);
+  setInterval(tryReload, 10 * 1000);
+})();

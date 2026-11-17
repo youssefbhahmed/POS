@@ -121,7 +121,7 @@ function topbar() {
   return `<header class="topbar">${left}<div class="spacer"></div>
     <span class="clock">${fmtTime(new Date())}</span>
     ${S.lastTicket ? `<button class="btn ghost hide-sm" data-a="reprint">${icon('reprint', 18)} Réimprimer</button>` : ''}
-    ${manager ? `<button class="btn ghost hide-sm" data-a="report">${icon('report', 18)} Rapport du jour</button>` : ''}
+    <button class="btn ghost" data-a="report" aria-label="Rapport du jour">${icon('report', 18)}<span class="hide-sm">Rapport du jour</span></button>
     <button class="status-chip" data-a="printer"><span class="led ${pb.ok ? 'ok' : ''}"></span>${icon('printer', 16)}<span class="hide-sm">${esc(pb.label)}</span></button>
     ${manager
       ? `<a class="btn ghost" href="#/admin" aria-label="Back-office">${icon('chart', 18)}<span class="hide-sm">Back-office</span></a>`

@@ -13,6 +13,10 @@ export const DEFAULT_SETTINGS = {
 };
 
 export const PAY_LABELS = { cash: 'Espèces', card: 'Carte', other: 'Autre' };
+// Libellés affichés dans les stats (inclut l'historique importé de l'ancienne caisse)
+export const PAY_STATS_LABELS = { ...PAY_LABELS, legacy: 'Ancienne caisse' };
+// Totaux journaliers importés : pas de vrais tickets
+export const isLegacy = (o) => o.payment_method === 'legacy';
 
 export async function loadSettings() {
   const r = await db.get('settings', 'main');
@@ -56,8 +60,9 @@ export function computeStats(orders, items, from, to) {
   const cat = new Map();
   let itemsSold = 0;
   const cancelledLines = { qty: 0, amount: 0 };
+  const legacyIds = new Set(paid.filter(isLegacy).map((o) => o.id));
   for (const it of items) {
-    if (!paidSet.has(it.order_id)) continue;
+    if (!paidSet.has(it.order_id) || legacyIds.has(it.order_id)) continue;
     if (it.qty > 0) {
       const key = it.product_id || it.product_name;
       const p = prod.get(key) || { name: it.product_name, category: it.category_name || '—', qty: 0, amount: 0 };
@@ -100,7 +105,7 @@ export function computeStats(orders, items, from, to) {
     for (const o of paid) {
       const t = new Date(o.closed_at);
       const b = buckets[idx.get(`${dayKey(t)} ${t.getHours()}`)];
-      if (b) { b.value += o.total || 0; b.count++; }
+      if (b) { b.value += o.total || 0; if (!isLegacy(o)) b.count++; }
     }
   } else {
     unit = 'day';
@@ -111,14 +116,17 @@ export function computeStats(orders, items, from, to) {
     }
     for (const o of paid) {
       const b = buckets[idx.get(dayKey(o.closed_at))];
-      if (b) { b.value += o.total || 0; b.count++; }
+      if (b) { b.value += o.total || 0; if (!isLegacy(o)) b.count++; }
     }
   }
 
+  const real = paid.filter((o) => !isLegacy(o));
+  const realRevenue = real.reduce((s, o) => s + (o.total || 0), 0);
   return {
     revenue,
-    tickets: paid.length,
-    avg: paid.length ? Math.round(revenue / paid.length) : 0,
+    legacyRevenue: revenue - realRevenue,
+    tickets: real.length,
+    avg: real.length ? Math.round(realRevenue / real.length) : 0,
     itemsSold,
     products: [...prod.values()].sort((a, b) => b.amount - a.amount),
     categories: [...cat.values()].sort((a, b) => b.amount - a.amount),

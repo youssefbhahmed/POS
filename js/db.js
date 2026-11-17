@@ -142,9 +142,12 @@ class LocalDB extends Emitter {
     this._write(d);
     this._emit({ table, type: 'DELETE' });
   }
-  // Pas d'authentification en mode local
+  // Pas d'authentification en mode local : accès gérant
   async getSession() {
     return { user: { email: 'local' } };
+  }
+  async getRole() {
+    return 'manager';
   }
   async signOut() {}
   exportAll() {
@@ -228,6 +231,11 @@ class CloudDB extends Emitter {
   async getSession() {
     const { data } = await this.sb.auth.getSession();
     return data.session;
+  }
+  // Rôle défini côté Supabase (app_metadata.role). Par défaut : caisse.
+  async getRole() {
+    const s = await this.getSession();
+    return s?.user?.app_metadata?.role === 'manager' ? 'manager' : 'caisse';
   }
   async signIn(email, password) {
     const { error } = await this.sb.auth.signInWithPassword({ email, password });

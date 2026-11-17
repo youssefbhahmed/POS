@@ -2,9 +2,9 @@
 // gestion des produits / tables / paramètres.
 
 import { db, uid, isCloud, nowIso } from './db.js';
-import { esc, modal, confirmDlg, promptDlg, toast, debounce, fmtDateTime, fmtTime, since, startOfDay, addDays, toLocalInput, dayKey, download } from './ui.js';
+import { esc, modal, confirmDlg, promptDlg, toast, debounce, fmtDate, fmtDateTime, fmtTime, since, startOfDay, addDays, toLocalInput, dayKey, download } from './ui.js';
 import { fmt, parseMoney, toInput } from './money.js';
-import { loadSettings, saveSettings, fetchClosed, fetchOpen, computeStats, orderTotal, PAY_LABELS, bySortName } from './data.js';
+import { loadSettings, saveSettings, fetchClosed, fetchOpen, computeStats, orderTotal, PAY_LABELS, PAY_STATS_LABELS, bySortName } from './data.js';
 import { buildOrderTicket, buildTestTicket, toHTML } from './ticket.js';
 import { printDoc, previewTicket } from './printer.js';
 import { icon } from './icons.js';
@@ -17,9 +17,28 @@ const TABS = [
   ['tables', 'Tables', 'grid', 'Salle', 'blue'],
   ['settings', 'Paramètres', 'sliders', 'Ticket & sécurité', 'sun'],
 ];
-const PAY_ICON = { cash: ['wallet', 'mint'], card: ['card', 'violet'], other: ['dots', 'sun'] };
+const PAY_ICON = { cash: ['wallet', 'mint'], card: ['card', 'violet'], other: ['dots', 'sun'], legacy: ['history', 'blue'] };
+
+// Résumé de l'ancienne caisse (importé) : totaux par produit sur toute la période
+function legacyCard(L) {
+  if (!L) return '';
+  const max = Math.max(1, ...L.products.map((p) => p.amount));
+  return `<section class="card"><div class="card-head"><h3>Ancienne caisse <small class="muted">· du ${fmtDate(L.from)} au ${fmtDate(L.to)}</small></h3>
+      <span class="badge">${L.days} jours importés</span></div>
+    <div class="kpis small4">
+      ${kpi("CA net", fmt(L.net))}${kpi('Commandes', L.orders.toLocaleString('fr-FR'))}${kpi('Panier moyen', fmt(L.avg))}${kpi('Remises', fmt(L.discounts))}
+    </div>
+    <p class="hint mt">L'ancienne caisse n'exporte que des totaux : le chiffre par jour est dans les graphiques ci-dessus, le détail par produit ci-dessous (sur toute la période).</p>
+    <div class="table-wrap mt"><table class="data"><thead><tr><th>Produit</th><th>Catégorie</th><th class="num">Quantité</th><th class="num">CA net</th><th class="num">% du CA</th></tr></thead>
+    <tbody>${L.products.map((p) => `<tr><td><b>${esc(p.name)}</b></td><td>${esc(p.category)}</td><td class="num">${p.qty.toLocaleString('fr-FR')}</td><td class="num"><b>${fmt(p.amount)}</b></td>
+      <td class="num"><span class="share">${L.net ? ((p.amount / L.net) * 100).toFixed(1) : 0} %<i style="--w:${(p.amount / max) * 100}%"></i></span></td></tr>`).join('')}</tbody></table></div></section>`;
+}
 
 export async function mountAdmin(root, hash) {
+  if (db.role !== 'manager') {
+    location.replace('#/caisse');
+    return () => {};
+  }
   const settings = await loadSettings();
   let ok = false;
   try { ok = sessionStorage.getItem('admin_ok') === '1'; } catch {}
@@ -232,9 +251,9 @@ const PAGES = {
       main.innerHTML = `${rangeBar()}
         <div class="kpis">
           ${kpi("Chiffre d'affaires", fmt(s.revenue), R.preset === 'custom' ? 'Période personnalisée' : PRESETS.find(([k]) => k === R.preset)?.[1], 'hero')}
-          ${kpi('Tickets', s.tickets)}
-          ${kpi('Panier moyen', fmt(s.avg))}
-          ${kpi('Articles vendus', s.itemsSold)}
+          ${kpi('Tickets', s.tickets, s.legacyRevenue ? 'nouvelle caisse uniquement' : '')}
+          ${kpi('Panier moyen', fmt(s.avg), s.legacyRevenue ? 'nouvelle caisse uniquement' : '')}
+          ${kpi('Articles vendus', s.itemsSold, s.legacyRevenue ? `nouvelle caisse · ${fmt(s.legacyRevenue)} de CA importé` : '')}
         </div>
         <section class="card"><h3>Chiffre d'affaires par ${s.unit === 'hour' ? 'heure' : 'jour'} <small class="muted">(DT)</small></h3><div class="chart" id="chart"></div></section>
         <div class="two-col">
@@ -243,7 +262,7 @@ const PAGES = {
             <div class="hb-track"><div class="hb-fill" style="width:${(c.amount / maxCat) * 100}%"></div></div></div>`).join('') || '<p class="muted">Aucune vente.</p>'}</section>
           <section class="card"><h3>Par mode de paiement</h3>
             ${Object.entries(s.payments).map(([m, v]) => `<div class="pay-row" style="--c:var(--${PAY_ICON[m]?.[1] || 'sun'})"><span class="pi">${icon(PAY_ICON[m]?.[0] || 'dots')}</span>
-              <span class="pn">${PAY_LABELS[m] || m}<small>${v.count} ticket${v.count > 1 ? 's' : ''} · ${s.revenue ? Math.round((v.amount / s.revenue) * 100) : 0} %</small></span><b>${fmt(v.amount)}</b></div>`).join('') || '<p class="muted">Aucun encaissement.</p>'}
+              <span class="pn">${PAY_STATS_LABELS[m] || m}<small>${v.count} ticket${v.count > 1 ? 's' : ''} · ${s.revenue ? Math.round((v.amount / s.revenue) * 100) : 0} %</small></span><b>${fmt(v.amount)}</b></div>`).join('') || '<p class="muted">Aucun encaissement.</p>'}
             <h3 class="mt">Annulations</h3>
             <table class="data"><tbody>
               <tr><td>Commandes annulées</td><td class="num">${s.cancelledOrders.count}</td><td class="num">${fmt(s.cancelledOrders.amount)}</td></tr>
@@ -253,7 +272,8 @@ const PAGES = {
         <section class="card"><div class="card-head"><h3>Par produit</h3><button class="btn sm" data-a="csv" ${prods.length ? '' : 'disabled'}>${icon('download', 16)} Exporter (CSV)</button></div>
           ${prods.length ? `<div class="table-wrap"><table class="data"><thead><tr>${th('name', 'Produit')}${th('category', 'Catégorie')}${th('qty', 'Quantité', 1)}${th('amount', 'CA', 1)}<th class="num">% du CA</th></tr></thead>
           <tbody>${prods.map((p) => { const pct = s.revenue ? (p.amount / s.revenue) * 100 : 0; return `<tr style="--c:${esc(colorOf(p.category))}"><td><b>${esc(p.name)}</b></td><td><span class="pdot" style="background:var(--c)"></span>${esc(p.category)}</td><td class="num">${p.qty}</td><td class="num"><b>${fmt(p.amount)}</b></td><td class="num"><span class="share">${pct.toFixed(1)} %<i style="--w:${Math.min(100, pct * 3)}%"></i></span></td></tr>`; }).join('')}</tbody></table></div>` : '<p class="muted">Aucune vente sur cette période.</p>'}
-        </section>`;
+        </section>
+        ${legacyCard(ctx.settings.legacy)}`;
       drawBarChart(main.querySelector('#chart'), s.buckets);
     };
     const draw = async (silent) => {
@@ -297,7 +317,7 @@ const PAGES = {
           const active = its(o).filter((i) => i.qty > 0);
           return `<div class="hist ${openId === o.id ? 'open' : ''}">
             <button class="hist-row" data-open="${o.id}"><span class="h-no">N° ${o.number ?? ''}</span><span>${fmtDateTime(o.closed_at)}</span><span>${esc(o.table_name || '')}</span>
-              <span class="muted hide-sm">${o.status === 'paid' ? PAY_LABELS[o.payment_method] || '' : esc(o.cancel_reason || '')}</span>${statusBadge(o.status)}<b class="num">${fmt(o.total)}</b></button>
+              <span class="muted hide-sm">${o.status === 'paid' ? PAY_STATS_LABELS[o.payment_method] || '' : esc(o.cancel_reason || '')}</span>${statusBadge(o.status)}<b class="num">${fmt(o.total)}</b></button>
             ${openId === o.id ? `<div class="hist-detail">
               <table class="data"><tbody>${active.map((i) => `<tr><td>${i.qty} × ${esc(i.product_name)}</td><td class="num">${fmt(i.unit_price)}</td><td class="num">${fmt(i.qty * i.unit_price)}</td></tr>`).join('')}
               ${its(o).filter((i) => i.cancelled_qty).map((i) => `<tr class="muted"><td><s>${i.cancelled_qty} × ${esc(i.product_name)}</s> (retiré)</td><td></td><td class="num"><s>${fmt(i.cancelled_qty * i.unit_price)}</s></td></tr>`).join('')}</tbody></table>

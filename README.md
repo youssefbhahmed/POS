@@ -32,6 +32,19 @@ Puis ouvrez <http://localhost:8765>. En mode local, la caisse et le back-office 
 
 > La clé « anon » peut être publique : sans compte connecté, la base refuse tout accès (règles RLS du schéma).
 
+### a bis) Rôles : gérant / caisse
+
+1. **SQL Editor** : exécutez [`supabase/roles.sql`](supabase/roles.sql).
+2. Désignez le gérant (accès au back-office) — remplacez l'email :
+   ```sql
+   update auth.users set raw_app_meta_data = coalesce(raw_app_meta_data, '{}'::jsonb) || '{"role":"manager"}'
+   where email = 'email-du-gerant@exemple.tn';
+   ```
+   Le gérant se déconnecte puis se reconnecte.
+3. Tout autre compte est **caisse** : il ne voit que l'écran de caisse, ne peut ni lire le chiffre d'affaires, ni modifier la carte, ni toucher à l'historique (bloqué aussi côté base de données).
+
+> Import MOJO : [`supabase/import_mojo.sql`](supabase/import_mojo.sql) vide la caisse, installe la carte MOJO et l'historique de l'ancienne caisse.
+
 ### b) Hébergement (HTTPS obligatoire pour l'imprimante USB)
 
 Le plus simple, avec ce dépôt GitHub : **Settings → Pages → Deploy from a branch → `main` / root**. L'appli sera disponible sur `https://<utilisateur>.github.io/POS/`.

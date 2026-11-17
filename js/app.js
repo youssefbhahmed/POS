@@ -18,6 +18,12 @@ async function route() {
     cleanup = null;
   }
   const h = location.hash || '#/';
+  // Compte « caisse » : uniquement l'écran de caisse
+  if (db.role !== 'manager' && !h.startsWith('#/caisse')) {
+    if (h.startsWith('#/admin')) toast('Back-office réservé au gérant', 'error');
+    location.replace('#/caisse');
+    return;
+  }
   root.innerHTML = '<div class="loading">Chargement…</div>';
   try {
     let c;
@@ -76,6 +82,7 @@ function showLogin() {
 let started = false;
 async function start() {
   if (isCloud && !(await db.getSession())) return showLogin();
+  db.role = await db.getRole();
   if (!started) {
     started = true;
     window.addEventListener('hashchange', route);

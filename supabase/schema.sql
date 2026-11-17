@@ -69,13 +69,13 @@ create table if not exists settings (
 );
 
 -- ── Sécurité : seuls les comptes connectés ont accès ─────────
+-- Les règles par rôle (gérant / caisse) sont dans roles.sql :
+-- exécutez-le juste après ce fichier.
 do $$
 declare t text;
 begin
   foreach t in array array['categories','products','cafe_tables','orders','order_items','settings'] loop
     execute format('alter table %I enable row level security', t);
-    execute format('drop policy if exists "staff_all" on %I', t);
-    execute format('create policy "staff_all" on %I for all to authenticated using (true) with check (true)', t);
   end loop;
 end $$;
 

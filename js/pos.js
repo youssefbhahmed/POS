@@ -117,12 +117,15 @@ function topbar() {
     ? `<button class="btn ghost" data-a="back">${icon('back')} Tables</button>`
     : `<a class="brand" href="#/"><span class="logo">${icon('coffee', 22)}</span><span><span class="brand-name">${esc(S.settings.shopName)}</span><span class="brand-sub">Caisse</span></span></a>`;
   const pb = printerBadge();
+  const manager = db.role === 'manager';
   return `<header class="topbar">${left}<div class="spacer"></div>
     <span class="clock">${fmtTime(new Date())}</span>
     ${S.lastTicket ? `<button class="btn ghost hide-sm" data-a="reprint">${icon('reprint', 18)} Réimprimer</button>` : ''}
-    <button class="btn ghost hide-sm" data-a="report">${icon('report', 18)} Rapport du jour</button>
+    ${manager ? `<button class="btn ghost hide-sm" data-a="report">${icon('report', 18)} Rapport du jour</button>` : ''}
     <button class="status-chip" data-a="printer"><span class="led ${pb.ok ? 'ok' : ''}"></span>${icon('printer', 16)}<span class="hide-sm">${esc(pb.label)}</span></button>
-    <a class="btn ghost" href="#/admin" aria-label="Back-office">${icon('chart', 18)}<span class="hide-sm">Back-office</span></a></header>`;
+    ${manager
+      ? `<a class="btn ghost" href="#/admin" aria-label="Back-office">${icon('chart', 18)}<span class="hide-sm">Back-office</span></a>`
+      : `<button class="btn ghost" data-a="logout" aria-label="Se déconnecter">${icon('logout', 18)}</button>`}</header>`;
 }
 
 const GUEST = 'Client passager';
@@ -263,6 +266,13 @@ async function handleClick(e) {
     case 'printer': await openPrinterSettings(S.settings); return render();
     case 'report': return reportFlow();
     case 'reprint': return safePrint(S.lastTicket);
+    case 'logout':
+      if (await confirmDlg('Se déconnecter', 'Déconnecter cette caisse ? Il faudra ressaisir l’email et le mot de passe.', 'Se déconnecter', true)) {
+        await db.signOut();
+        location.hash = '#/';
+        location.reload();
+      }
+      return;
   }
 }
 

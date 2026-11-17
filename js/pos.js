@@ -125,6 +125,10 @@ function topbar() {
     <a class="btn ghost" href="#/admin" aria-label="Back-office">${icon('chart', 18)}<span class="hide-sm">Back-office</span></a></header>`;
 }
 
+const GUEST = 'Client passager';
+// Nom affiché pour une commande : la table, ou « Client passager »
+const whoLabel = (o) => (o?.table_id ? o.table_name : GUEST);
+
 function tablesView() {
   const activeIds = new Set(S.tables.map((t) => t.id));
   const tableCards = S.tables.map((t) => {
@@ -140,25 +144,35 @@ function tablesView() {
   const counterCards = counter.map((o) => {
     const its = itemsOf(o).filter((i) => i.qty > 0);
     return `<button class="table-card busy counter" data-a="counter-open" data-id="${o.id}">
-      <span class="t-name">${esc(o.table_name || 'Comptoir')} · ${o.number ?? ''}</span>
-      <span class="t-meta">${icon('clock', 13)} ${since(o.opened_at)}</span>
+      <span class="t-name">${esc(whoLabel(o))} N° ${o.number ?? ''}</span>
+      <span class="t-meta">${icon('clock', 13)} ${since(o.opened_at)} · ${its.reduce((s, i) => s + i.qty, 0)} art.</span>
       <span class="t-total">${fmt(orderTotal(its))}</span></button>`;
   });
   const busy = S.orders.length;
   const pendingTotal = S.orders.reduce((s, o) => s + orderTotal(itemsOf(o)), 0);
   const freeCount = S.tables.filter((t) => !S.orders.some((o) => o.table_id === t.id)).length;
   return `<main class="tables-scroll">
+    <section class="who">
+      <h2 class="who-title">Nouvelle commande : pour qui ?</h2>
+      <div class="who-grid">
+        <button class="who-card c-violet" data-a="counter-new">
+          <span class="who-ic">${icon('bag', 34)}</span>
+          <span class="who-txt"><b>Client passager</b><span>Sans table · à emporter ou au comptoir</span></span>
+          <span class="who-go">${icon('arrow', 22)}</span></button>
+        <button class="who-card c-orange" data-a="scroll-tables">
+          <span class="who-ic">${icon('grid', 34)}</span>
+          <span class="who-txt"><b>Client à une table</b><span>Touchez la table dans la liste ci-dessous</span></span>
+          <span class="who-go down">${icon('arrow', 22)}</span></button>
+      </div>
+    </section>
     <div class="summary">
       <div class="stat c-berry"><span class="s-ic">${icon('receipt')}</span><div><small>En cours</small><b>${busy} commande${busy > 1 ? 's' : ''}</b></div></div>
       <div class="stat c-violet"><span class="s-ic">${icon('wallet')}</span><div><small>Non encaissé</small><b>${fmt(pendingTotal)}</b></div></div>
       <div class="stat c-mint"><span class="s-ic">${icon('grid')}</span><div><small>Tables libres</small><b>${freeCount} / ${S.tables.length}</b></div></div>
     </div>
-    <h2 class="section-title">Comptoir <small>à emporter · sans table</small></h2>
-    <div class="table-grid">
-      <button class="table-card new" data-a="counter-new">${icon('plus', 26)}<span class="t-name">Nouvelle vente</span></button>
-      ${counterCards.join('')}
-    </div>
-    <h2 class="section-title">Salle & terrasse</h2>
+    ${counterCards.length ? `<h2 class="section-title">Clients passagers en cours <small>non encaissés</small></h2>
+    <div class="table-grid">${counterCards.join('')}</div>` : ''}
+    <h2 class="section-title" id="tables-sec">Tables <small>orange = occupée · blanc = libre</small></h2>
     <div class="table-grid">${tableCards.join('') || '<p class="muted">Aucune table. Ajoutez-en dans le back-office.</p>'}</div>
   </main>`;
 }
@@ -170,7 +184,8 @@ function orderView() {
   const cancelled = items.filter((i) => i.cancelled_qty > 0);
   const total = orderTotal(active);
   const table = S.sel.tableId ? S.tables.find((t) => t.id === S.sel.tableId) : null;
-  const title = o?.table_name || table?.name || 'Comptoir';
+  const isTable = o ? !!o.table_id : !!table;
+  const title = o ? whoLabel(o) : table?.name || GUEST;
   const catColor = Object.fromEntries(S.cats.map((c) => [c.id, c.color || '#6f4e37']));
   const products = S.products.filter((p) => p.active !== false && (!S.catId || p.category_id === S.catId));
 
@@ -191,9 +206,11 @@ function orderView() {
           <span class="p-name">${esc(p.name)}</span><span class="p-price">${fmt(p.price)}</span></button>`).join('') || '<p class="muted pad">Aucun produit dans cette catégorie.</p>'}</div>
     </section>
     <aside class="ticket">
-      <div class="ticket-head">
-        <div><div class="t-title">${esc(title)}</div><div class="t-sub">${o ? `N° ${o.number ?? '…'} · ouverte à ${fmtTime(o.opened_at)}` : 'Nouvelle commande'}</div></div>
-        ${o ? `<button class="btn sm" data-a="transfer">${icon('move', 16)} Changer de table</button>` : ''}
+      <div class="for-banner ${isTable ? 'c-orange' : 'c-violet'}">
+        <span class="fb-ic">${icon(isTable ? 'grid' : 'bag', 28)}</span>
+        <div class="fb-txt"><small>Commande pour</small><div class="t-title">${esc(title)}</div>
+          <div class="t-sub">${o ? `N° ${o.number ?? '…'} · ouverte à ${fmtTime(o.opened_at)}` : 'Nouvelle commande'}</div></div>
+        <button class="btn fb-btn" data-a="transfer">${icon('move', 18)} ${isTable ? 'Changer de table' : 'Mettre à une table'}</button>
       </div>
       <div class="lines">
         ${active.length ? active.map(line).join('') : `<div class="empty">${icon('coffee', 40)}<span>Touchez un produit pour l’ajouter</span></div>`}
@@ -201,9 +218,14 @@ function orderView() {
       </div>
       <div class="ticket-total"><span>Total</span><strong>${fmt(total)}</strong></div>
       <div class="ticket-actions">
-        <button class="btn danger-ghost big" data-a="cancel-order" aria-label="Annuler la commande" ${o ? '' : 'disabled'}>${icon('ban')}</button>
-        <button class="btn big" data-a="bill" ${active.length ? '' : 'disabled'}>${icon('receipt')} Addition</button>
-        <button class="btn cta big" data-a="pay" ${active.length ? '' : 'disabled'}>Encaisser ${icon('arrow')}</button>
+        <div class="ta-sec">
+          <button class="btn danger-ghost" data-a="cancel-order" ${o ? '' : 'disabled'}>${icon('ban', 18)} Annuler</button>
+          <button class="btn" data-a="bill" ${active.length ? '' : 'disabled'}>${icon('receipt', 18)} Addition</button>
+        </div>
+        <div class="ta-main">
+          <button class="btn validate big" data-a="validate" ${active.length ? '' : 'disabled'}>${icon('check')} Valider<small>payer plus tard</small></button>
+          <button class="btn cta big" data-a="pay" ${active.length ? '' : 'disabled'}>${icon('wallet')} Encaisser<small>payé maintenant</small></button>
+        </div>
       </div>
     </aside>
   </main>`;
@@ -219,12 +241,22 @@ async function handleClick(e) {
     case 'counter-new': S.sel = { tableId: null, orderId: null }; S.view = 'order'; return render();
     case 'counter-open': S.sel = { tableId: null, orderId: id }; S.view = 'order'; return render();
     case 'back': return leaveOrder();
+    case 'scroll-tables': {
+      const sec = S.root.querySelector('#tables-sec');
+      sec?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      const grid = sec?.nextElementSibling;
+      grid?.classList.remove('flash');
+      void grid?.offsetWidth;
+      grid?.classList.add('flash');
+      return;
+    }
     case 'cat': S.catId = id; return render();
     case 'add': return addProduct(id);
     case 'plus': return changeQty(id, +1);
     case 'minus': return changeQty(id, -1);
     case 'del': return removeLine(id);
     case 'pay': return payFlow();
+    case 'validate': return validateOrder();
     case 'bill': return printBill();
     case 'cancel-order': return cancelOrder();
     case 'transfer': return transferOrder();
@@ -259,7 +291,7 @@ async function ensureOrder(sel) {
   if (cur) return cur;
   const t = sel.tableId ? S.tables.find((x) => x.id === sel.tableId) : null;
   const o = await db.insert('orders', {
-    id: uid(), table_id: t?.id ?? null, table_name: t?.name ?? 'Comptoir',
+    id: uid(), table_id: t?.id ?? null, table_name: t?.name ?? GUEST,
     status: 'open', opened_at: nowIso(), total: 0,
   });
   S.orders.push(o);
@@ -350,7 +382,7 @@ async function payFlow() {
   };
 
   const res = await modal({
-    title: `Encaisser · ${o.table_name || 'Comptoir'}`,
+    title: `Encaisser · ${whoLabel(o)}`,
     body: `
       <div class="pay-total">${fmt(total)}</div>
       <div class="seg">${Object.entries(PAY_LABELS).map(([k, l], i) => `<button type="button" class="seg-btn ${i === 0 ? 'on' : ''}" data-m="${k}">${icon({ cash: 'wallet', card: 'card', other: 'dots' }[k], 18)}${l}</button>`).join('')}</div>
@@ -402,6 +434,18 @@ async function payFlow() {
   if (res.print) await safePrint(doc);
 }
 
+// Valider sans encaisser : la commande reste ouverte (non payée) sur sa table
+async function validateOrder() {
+  await queue;
+  const o = currentOrder();
+  if (!o) return;
+  const total = orderTotal(itemsOf(o).filter((i) => i.qty > 0));
+  S.view = 'tables';
+  S.sel = null;
+  render();
+  toast(`Commande validée · ${whoLabel(o)} · ${fmt(total)} à encaisser`, 'ok');
+}
+
 async function printBill() {
   await queue;
   const o = currentOrder();
@@ -417,7 +461,7 @@ async function cancelOrder() {
   const total = orderTotal(items.filter((i) => i.qty > 0));
   const reason = await modal({
     title: 'Annuler la commande',
-    body: `<p>Annuler toute la commande de <b>${esc(o.table_name)}</b> (${fmt(total)}) ? Elle restera visible dans l'historique comme annulée.</p>
+    body: `<p>Annuler toute la commande de <b>${esc(whoLabel(o))}</b> (${fmt(total)}) ? Elle restera visible dans l'historique comme annulée.</p>
       <label class="field"><span>Motif (facultatif)</span><input class="input" id="why" placeholder="Ex. client parti, erreur de saisie…"></label>`,
     buttons: [
       { label: 'Retour', value: null },
@@ -441,28 +485,44 @@ async function cancelOrder() {
 async function transferOrder() {
   await queue;
   const o = currentOrder();
-  if (!o) return;
-  const busy = new Set(S.orders.map((x) => x.table_id).filter(Boolean));
+  const curTable = o ? o.table_id : S.sel.tableId;
+  const busy = new Set(S.orders.filter((x) => x.id !== o?.id).map((x) => x.table_id).filter(Boolean));
   const choice = await modal({
-    title: `Déplacer ${o.table_name}`,
-    body: `<p class="muted">Choisissez la nouvelle table (seules les tables libres sont proposées).</p>
+    title: 'Pour qui est cette commande ?',
+    wide: true,
+    body: `
+      <button class="who-card c-violet sm ${!curTable ? 'current' : ''}" data-pick="__guest">
+        <span class="who-ic">${icon('bag', 26)}</span><span class="who-txt"><b>Client passager</b><span>Sans table</span></span>
+        ${!curTable ? '<span class="badge">Actuel</span>' : ''}</button>
+      <h4 class="pick-title">Ou choisissez une table</h4>
       <div class="pick-grid">
-        <button class="table-card" data-pick="__counter"><span class="t-name">Comptoir</span></button>
-        ${S.tables.filter((t) => !busy.has(t.id)).map((t) => `<button class="table-card" data-pick="${t.id}"><span class="t-name">${esc(t.name)}</span></button>`).join('')}
+        ${S.tables.map((t) => {
+          if (t.id === curTable) return `<button class="table-card current" disabled><span class="t-name">${esc(t.name)}</span><span class="t-meta">Actuelle</span></button>`;
+          if (busy.has(t.id)) return `<button class="table-card taken" disabled><span class="t-name">${esc(t.name)}</span><span class="t-meta">Occupée</span></button>`;
+          return `<button class="table-card" data-pick="${t.id}"><span class="t-name">${esc(t.name)}</span><span class="t-meta"><span class="led"></span>Libre</span></button>`;
+        }).join('')}
       </div>`,
-    onMount: (w, close) => w.querySelector('.pick-grid').addEventListener('click', (e) => {
+    onMount: (w, close) => w.querySelector('.modal-body').addEventListener('click', (e) => {
       const b = e.target.closest('[data-pick]');
       if (b) close(b.dataset.pick);
     }),
   });
   if (!choice) return;
-  const t = choice === '__counter' ? null : S.tables.find((x) => x.id === choice);
-  const patch = { table_id: t?.id ?? null, table_name: t?.name ?? 'Comptoir' };
+  const t = choice === '__guest' ? null : S.tables.find((x) => x.id === choice);
+  if ((t?.id ?? null) === (curTable ?? null)) return;
+  const label = t?.name ?? GUEST;
+  if (!o) {
+    // Pas encore d'article : on change simplement la destination
+    S.sel = { tableId: t?.id ?? null, orderId: null };
+    render();
+    return toast(`Commande pour : ${label}`, 'ok');
+  }
+  const patch = { table_id: t?.id ?? null, table_name: label };
   Object.assign(o, patch);
   S.sel = { tableId: t?.id ?? null, orderId: o.id };
   render();
   enqueue(() => db.update('orders', o.id, patch));
-  toast(`Commande déplacée vers ${patch.table_name}`, 'ok');
+  toast(`Commande déplacée vers : ${label}`, 'ok');
 }
 
 async function reportFlow() {

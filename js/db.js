@@ -8,7 +8,9 @@
 
 import { CONFIG } from './config.js';
 
-export const isCloud = Boolean(CONFIG.SUPABASE_URL && CONFIG.SUPABASE_ANON_KEY);
+// « ?demo » dans l'adresse : mode démo local (formation, tests), sans toucher aux vraies ventes
+export const isDemo = new URLSearchParams(location.search).has('demo');
+export const isCloud = Boolean(CONFIG.SUPABASE_URL && CONFIG.SUPABASE_ANON_KEY) && !isDemo;
 
 export const uid = () =>
   crypto.randomUUID

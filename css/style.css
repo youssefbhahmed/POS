@@ -237,6 +237,45 @@ select.input { appearance: none; background-image: linear-gradient(45deg, transp
 .table-card.new .t-name { font: 800 15px/1.2 var(--font-ui); }
 .table-card.new:hover { background: color-mix(in srgb, var(--violet) 14%, var(--surface)); border-color: var(--violet); }
 
+/* Choix « pour qui ? » */
+.who { margin-bottom: 22px; }
+.who-title { font: 800 26px/1.15 var(--font-display); margin: 0 0 14px; }
+.who-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.who-card { position: relative; display: flex; align-items: center; gap: 16px; width: 100%; min-height: 104px; padding: 18px 22px; border: 0; border-radius: var(--r-lg);
+  background: var(--g); color: #fff; font: inherit; text-align: left; cursor: pointer; box-shadow: var(--sh-color); overflow: hidden; transition: transform .12s, filter .15s; }
+.who-card::after { content: ""; position: absolute; width: 160px; height: 160px; right: -50px; bottom: -80px; border-radius: 50%; background: rgba(255,255,255,.13); }
+.who-card:hover { filter: brightness(1.06); }
+.who-card:active { transform: scale(.98); }
+.who-ic { display: grid; place-items: center; width: 64px; height: 64px; border-radius: 20px; background: rgba(255,255,255,.2); flex: none; }
+.who-txt { display: flex; flex-direction: column; gap: 4px; flex: 1; position: relative; z-index: 1; }
+.who-txt b { font: 800 24px/1.1 var(--font-display); }
+.who-txt span { font-weight: 700; font-size: 14px; color: rgba(255,255,255,.9); }
+.who-go { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; background: rgba(255,255,255,.22); flex: none; position: relative; z-index: 1; }
+.who-go.down .ic { transform: rotate(90deg); }
+.who-card.sm { min-height: 76px; padding: 12px 16px; margin-bottom: 6px; }
+.who-card.sm .who-ic { width: 50px; height: 50px; border-radius: 16px; }
+.who-card.sm .who-txt b { font-size: 20px; }
+.who-card .badge { position: relative; z-index: 1; background: rgba(255,255,255,.25); color: #fff; }
+.who-card.current { outline: 3px solid var(--ink); outline-offset: 3px; }
+.pick-title { font: 800 13px/1 var(--font-ui); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 20px 0 10px; }
+.pick-grid .table-card { min-height: 78px; }
+.pick-grid .table-card.taken { opacity: .45; cursor: not-allowed; background: var(--surface-2); }
+.pick-grid .table-card.taken .t-meta { color: var(--danger); }
+.pick-grid .table-card.current { cursor: default; border: 3px solid var(--orange); }
+.pick-grid .table-card.current .t-meta { color: var(--orange); }
+.table-grid.flash .table-card:not(.busy) { animation: flash 1.2s ease-out; }
+@keyframes flash { 0%, 40% { border-color: var(--orange); box-shadow: 0 0 0 4px color-mix(in srgb, var(--orange) 30%, transparent); } }
+
+/* Bandeau « Commande pour » */
+.for-banner { position: relative; display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 4px 14px; padding: 16px 18px; background: var(--g); color: #fff; overflow: hidden; }
+.for-banner::after { content: ""; position: absolute; width: 150px; height: 150px; right: -50px; top: -70px; border-radius: 50%; background: rgba(255,255,255,.13); }
+.fb-ic { display: grid; place-items: center; width: 56px; height: 56px; border-radius: 18px; background: rgba(255,255,255,.22); }
+.fb-txt small { font-weight: 800; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: rgba(255,255,255,.85); }
+.for-banner .t-title { font: 800 32px/1.05 var(--font-display); }
+.for-banner .t-sub { color: rgba(255,255,255,.85); }
+.for-banner .fb-btn { grid-column: 1 / -1; margin-top: 10px; position: relative; z-index: 1; background: rgba(255,255,255,.95); color: var(--ink); border: 0; min-height: 46px; }
+.for-banner .fb-btn:hover { background: #fff; }
+
 .order-view { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr minmax(360px, 420px); }
 .catalog { display: flex; flex-direction: column; min-height: 0; }
 .cat-tabs { display: flex; gap: 10px; padding: 18px 20px 14px; overflow-x: auto; flex: none; scrollbar-width: none; }
@@ -283,7 +322,13 @@ select.input { appearance: none; background-image: linear-gradient(45deg, transp
   background: color-mix(in srgb, var(--orange) 10%, var(--surface)); border: 1.5px solid color-mix(in srgb, var(--orange) 25%, transparent); }
 .ticket-total span { font-weight: 800; font-size: 12px; letter-spacing: .16em; text-transform: uppercase; color: var(--accent); }
 .ticket-total strong { font: 800 38px/1 var(--font-display); letter-spacing: -.03em; }
-.ticket-actions { display: grid; grid-template-columns: auto auto 1fr; gap: 8px; padding: 0 16px 16px; }
+.ticket-actions { display: flex; flex-direction: column; gap: 8px; padding: 0 16px 16px; }
+.ta-sec, .ta-main { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.ta-main .btn { flex-direction: column; gap: 2px; min-height: 70px; font-size: 18px; }
+.ta-main .btn > .ic { display: none; }
+.ta-main .btn small { font: 700 11px/1 var(--font-ui); letter-spacing: .06em; text-transform: uppercase; opacity: .85; }
+.btn.validate { --c: var(--violet); background: var(--grad-violet); border: 0; color: #fff; box-shadow: var(--sh-color); }
+.btn.validate:hover { filter: brightness(1.08); }
 
 .pay-total { font: 800 58px/1 var(--font-display); letter-spacing: -.03em; text-align: center; margin: 6px 0 20px;
   background: var(--grad-hot); -webkit-background-clip: text; background-clip: text; color: transparent; }
@@ -450,7 +495,14 @@ table.data { width: 100%; border-collapse: collapse; font-size: 14px; }
   .order-view { grid-template-columns: 1fr; grid-template-rows: 1fr minmax(0, 50dvh); }
   .ticket-total strong { font-size: 30px; }
   .hide-sm, .clock { display: none; }
-  .ticket-head .btn { display: none; }
+  .who-grid { grid-template-columns: 1fr; gap: 10px; }
+  .who-card { min-height: 84px; padding: 14px 16px; }
+  .who-ic { width: 52px; height: 52px; }
+  .who-txt b { font-size: 20px; }
+  .who-title { font-size: 22px; }
+  .for-banner { padding: 12px 14px; }
+  .for-banner .t-title { font-size: 26px; }
+  .fb-ic { width: 46px; height: 46px; }
   .topbar { padding: 8px 10px; }
   .row2 { grid-template-columns: 1fr; }
   .hist-row > .badge { display: none; }

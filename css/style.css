@@ -257,6 +257,14 @@ select.input { appearance: none; background-image: linear-gradient(45deg, transp
 .who-card.sm .who-txt b { font-size: 20px; }
 .who-card .badge { position: relative; z-index: 1; background: rgba(255,255,255,.25); color: #fff; }
 .who-card.current { outline: 3px solid var(--ink); outline-offset: 3px; }
+.who-card.tab-box { cursor: default; align-items: flex-start; }
+.who-card.tab-box:active { transform: none; }
+.tab-form { display: flex; gap: 6px; margin-top: 6px; }
+.tab-form .input { min-height: 40px; padding: 6px 10px; background: #fff; color: #1F1535; border: 0; }
+.tab-form .input::placeholder { color: #8A7F9C; }
+.tab-form .btn { min-height: 40px; background: var(--night); color: #fff; border: 0; }
+.chip.tab-chip { border-color: color-mix(in srgb, var(--sun) 45%, transparent); background: color-mix(in srgb, var(--sun) 12%, var(--surface)); color: var(--warn); }
+.table-card.ardoise { --c: var(--sun); background: var(--grad-gold); }
 .pick-title { font: 800 13px/1 var(--font-ui); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 20px 0 10px; }
 .pick-grid .table-card { min-height: 78px; }
 .pick-grid .table-card.taken { opacity: .45; cursor: not-allowed; background: var(--surface-2); }

@@ -129,8 +129,12 @@ function topbar() {
 }
 
 const GUEST = 'Client passager';
-// Nom affiché pour une commande : la table, ou « Client passager »
-const whoLabel = (o) => (o?.table_id ? o.table_name : GUEST);
+// Ardoise : commande sans table, au nom du client, à payer plus tard
+const TAB_PREFIX = 'Ardoise · ';
+const isTab = (o) => !o?.table_id && String(o?.table_name || '').startsWith(TAB_PREFIX);
+const tabName = (o) => String(o.table_name).slice(TAB_PREFIX.length);
+// Nom affiché pour une commande : la table, l'ardoise, ou « Client passager »
+const whoLabel = (o) => (o?.table_id || isTab(o) ? o.table_name : GUEST);
 
 function tablesView() {
   const activeIds = new Set(S.tables.map((t) => t.id));
@@ -143,7 +147,16 @@ function tablesView() {
       <span class="t-meta">${icon('clock', 13)} ${since(o.opened_at)} · ${its.reduce((s, i) => s + i.qty, 0)} art.</span>
       <span class="t-total">${fmt(orderTotal(its))}</span></button>`;
   });
-  const counter = S.orders.filter((o) => !o.table_id || !activeIds.has(o.table_id));
+  const counter = S.orders.filter((o) => (!o.table_id || !activeIds.has(o.table_id)) && !isTab(o));
+  const tabs = S.orders.filter(isTab).sort((a, b) => tabName(a).localeCompare(tabName(b), 'fr'));
+  const tabsTotal = tabs.reduce((s, o) => s + orderTotal(itemsOf(o)), 0);
+  const tabCards = tabs.map((o) => {
+    const its = itemsOf(o).filter((i) => i.qty > 0);
+    return `<button class="table-card busy ardoise" data-a="counter-open" data-id="${o.id}">
+      <span class="t-name">${esc(tabName(o))}</span>
+      <span class="t-meta">${icon('clock', 13)} depuis ${since(o.opened_at)} · ${its.reduce((s, i) => s + i.qty, 0)} art.</span>
+      <span class="t-total">${fmt(orderTotal(its))}</span></button>`;
+  });
   const counterCards = counter.map((o) => {
     const its = itemsOf(o).filter((i) => i.qty > 0);
     return `<button class="table-card busy counter" data-a="counter-open" data-id="${o.id}">
@@ -175,6 +188,8 @@ function tablesView() {
     </div>
     ${counterCards.length ? `<h2 class="section-title">Clients passagers en cours <small>non encaissés</small></h2>
     <div class="table-grid">${counterCards.join('')}</div>` : ''}
+    ${tabCards.length ? `<h2 class="section-title">Ardoises <small>à payer plus tard · total ${fmt(tabsTotal)}</small></h2>
+    <div class="table-grid">${tabCards.join('')}</div>` : ''}
     <h2 class="section-title" id="tables-sec">Tables <small>orange = occupée · blanc = libre</small></h2>
     <div class="table-grid">${tableCards.join('') || '<p class="muted">Aucune table. Ajoutez-en dans le back-office.</p>'}</div>
   </main>`;
@@ -188,7 +203,11 @@ function orderView() {
   const total = orderTotal(active);
   const table = S.sel.tableId ? S.tables.find((t) => t.id === S.sel.tableId) : null;
   const isTable = o ? !!o.table_id : !!table;
-  const title = o ? whoLabel(o) : table?.name || GUEST;
+  const tab = o ? isTab(o) : !!S.sel.tabName;
+  const title = o ? whoLabel(o) : table?.name || (S.sel.tabName ? TAB_PREFIX + S.sel.tabName : GUEST);
+  const bannerColor = tab ? 'c-sun' : isTable ? 'c-orange' : 'c-violet';
+  const bannerIcon = tab ? 'wallet' : isTable ? 'grid' : 'bag';
+  const moveLabel = isTable || tab ? 'Changer (table, passager, ardoise)' : 'Mettre à une table / ardoise';
   const catColor = Object.fromEntries(S.cats.map((c) => [c.id, c.color || '#6f4e37']));
   const products = S.products.filter((p) => p.active !== false && (!S.catId || p.category_id === S.catId));
 
@@ -209,11 +228,11 @@ function orderView() {
           <span class="p-name">${esc(p.name)}</span><span class="p-price">${fmt(p.price)}</span></button>`).join('') || '<p class="muted pad">Aucun produit dans cette catégorie.</p>'}</div>
     </section>
     <aside class="ticket">
-      <div class="for-banner ${isTable ? 'c-orange' : 'c-violet'}">
-        <span class="fb-ic">${icon(isTable ? 'grid' : 'bag', 28)}</span>
+      <div class="for-banner ${bannerColor}">
+        <span class="fb-ic">${icon(bannerIcon, 28)}</span>
         <div class="fb-txt"><small>Commande pour</small><div class="t-title">${esc(title)}</div>
           <div class="t-sub">${o ? `N° ${o.number ?? '…'} · ouverte à ${fmtTime(o.opened_at)}` : 'Nouvelle commande'}</div></div>
-        <button class="btn fb-btn" data-a="transfer">${icon('move', 18)} ${isTable ? 'Changer de table' : 'Mettre à une table'}</button>
+        <button class="btn fb-btn" data-a="transfer">${icon('move', 18)} ${moveLabel}</button>
       </div>
       <div class="lines">
         ${active.length ? active.map(line).join('') : `<div class="empty">${icon('coffee', 40)}<span>Touchez un produit pour l’ajouter</span></div>`}
@@ -301,7 +320,7 @@ async function ensureOrder(sel) {
   if (cur) return cur;
   const t = sel.tableId ? S.tables.find((x) => x.id === sel.tableId) : null;
   const o = await db.insert('orders', {
-    id: uid(), table_id: t?.id ?? null, table_name: t?.name ?? GUEST,
+    id: uid(), table_id: t?.id ?? null, table_name: t?.name ?? (sel.tabName ? TAB_PREFIX + sel.tabName : GUEST),
     status: 'open', opened_at: nowIso(), total: 0,
   });
   S.orders.push(o);
@@ -496,14 +515,27 @@ async function transferOrder() {
   await queue;
   const o = currentOrder();
   const curTable = o ? o.table_id : S.sel.tableId;
+  const curIsTab = isTab(o);
+  const isGuest = !curTable && !curIsTab;
   const busy = new Set(S.orders.filter((x) => x.id !== o?.id).map((x) => x.table_id).filter(Boolean));
+  const otherTabs = S.orders.filter((x) => isTab(x) && x.id !== o?.id);
   const choice = await modal({
     title: 'Pour qui est cette commande ?',
     wide: true,
     body: `
-      <button class="who-card c-violet sm ${!curTable ? 'current' : ''}" data-pick="__guest">
-        <span class="who-ic">${icon('bag', 26)}</span><span class="who-txt"><b>Client passager</b><span>Sans table</span></span>
-        ${!curTable ? '<span class="badge">Actuel</span>' : ''}</button>
+      <div class="who-grid">
+        <button class="who-card c-violet sm ${isGuest ? 'current' : ''}" data-pick="__guest">
+          <span class="who-ic">${icon('bag', 26)}</span><span class="who-txt"><b>Client passager</b><span>Sans table</span></span>
+          ${isGuest ? '<span class="badge">Actuel</span>' : ''}</button>
+        <div class="who-card c-sun sm tab-box ${curIsTab ? 'current' : ''}">
+          <span class="who-ic">${icon('wallet', 26)}</span>
+          <span class="who-txt"><b>Ardoise</b><span>Le client paiera plus tard</span>
+            <span class="tab-form"><input class="input" id="tab-name" placeholder="Nom du client" value="${curIsTab ? esc(tabName(o)) : ''}" data-noautofocus>
+            <button type="button" class="btn" data-tab-new>OK</button></span></span>
+        </div>
+      </div>
+      ${otherTabs.length ? `<h4 class="pick-title">Ajouter à une ardoise existante</h4>
+        <div class="chips">${otherTabs.map((x) => `<button class="chip tab-chip" data-pick="__tab:${esc(tabName(x))}">${icon('wallet', 14)} ${esc(tabName(x))} · ${fmt(orderTotal(itemsOf(x)))}</button>`).join('')}</div>` : ''}
       <h4 class="pick-title">Ou choisissez une table</h4>
       <div class="pick-grid">
         ${S.tables.map((t) => {
@@ -512,14 +544,28 @@ async function transferOrder() {
           return `<button class="table-card" data-pick="${t.id}"><span class="t-name">${esc(t.name)}</span><span class="t-meta"><span class="led"></span>Libre</span></button>`;
         }).join('')}
       </div>`,
-    onMount: (w, close) => w.querySelector('.modal-body').addEventListener('click', (e) => {
-      const b = e.target.closest('[data-pick]');
-      if (b) close(b.dataset.pick);
-    }),
+    onMount: (w, close) => {
+      const input = w.querySelector('#tab-name');
+      const submitTab = () => {
+        const name = input.value.trim().replace(/\s+/g, ' ');
+        if (!name) {
+          input.focus();
+          return toast('Écrivez le nom du client', 'error');
+        }
+        close(`__tab:${name}`);
+      };
+      w.querySelector('.modal-body').addEventListener('click', (e) => {
+        if (e.target.closest('[data-tab-new]')) return submitTab();
+        const b = e.target.closest('[data-pick]');
+        if (b) close(b.dataset.pick);
+      });
+      input.addEventListener('keydown', (e) => e.key === 'Enter' && submitTab());
+    },
   });
   if (!choice) return;
+  if (choice.startsWith('__tab:')) return moveToTab(o, choice.slice(6));
   const t = choice === '__guest' ? null : S.tables.find((x) => x.id === choice);
-  if ((t?.id ?? null) === (curTable ?? null)) return;
+  if ((t?.id ?? null) === (curTable ?? null) && !curIsTab) return;
   const label = t?.name ?? GUEST;
   if (!o) {
     // Pas encore d'article : on change simplement la destination
@@ -533,6 +579,36 @@ async function transferOrder() {
   render();
   enqueue(() => db.update('orders', o.id, patch));
   toast(`Commande déplacée vers : ${label}`, 'ok');
+}
+
+// Mettre la commande sur l'ardoise d'un client (la table est libérée).
+// Si ce client a déjà une ardoise ouverte, les articles y sont ajoutés.
+function moveToTab(o, name) {
+  const label = TAB_PREFIX + name;
+  const existing = S.orders.find((x) => isTab(x) && x.id !== o?.id && tabName(x).toLowerCase() === name.toLowerCase());
+  if (!o) {
+    // Aucun article encore : on prend directement la commande pour cette ardoise
+    S.sel = existing ? { tableId: null, orderId: existing.id } : { tableId: null, orderId: null, tabName: name };
+    render();
+    return toast(`Commande pour : ${label}`, 'ok');
+  }
+  if (existing) {
+    const moved = itemsOf(o);
+    moved.forEach((i) => (i.order_id = existing.id));
+    S.orders = S.orders.filter((x) => x.id !== o.id);
+    enqueue(async () => {
+      for (const i of moved) await db.update('order_items', i.id, { order_id: existing.id });
+      await db.remove('orders', o.id);
+    });
+  } else {
+    Object.assign(o, { table_id: null, table_name: label });
+    enqueue(() => db.update('orders', o.id, { table_id: null, table_name: label }));
+  }
+  const total = orderTotal(itemsOf(existing || o).filter((i) => i.qty > 0));
+  S.view = 'tables';
+  S.sel = null;
+  render();
+  toast(`Sur l'ardoise de ${name} · ${fmt(total)} à payer`, 'ok');
 }
 
 async function reportFlow() {

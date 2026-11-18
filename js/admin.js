@@ -189,6 +189,9 @@ const PAGES = {
       const st = computeStats(today.orders, today.items, t0, addDays(t0, 1));
       const itemsOf = (o) => open.items.filter((i) => i.order_id === o.id);
       const pending = open.orders.reduce((s, o) => s + orderTotal(itemsOf(o)), 0);
+      const tabOrders = open.orders.filter((o) => !o.table_id && String(o.table_name || '').startsWith('Ardoise · '));
+      const tabsCount = tabOrders.length;
+      const tabsTotal = tabOrders.reduce((s, o) => s + orderTotal(itemsOf(o)), 0);
       const activeTables = tables.filter((t) => t.active !== false).sort(bySortName);
       const ids = new Set(activeTables.map((t) => t.id));
 
@@ -216,7 +219,7 @@ const PAGES = {
         <div class="kpis">
           ${kpi("CA encaissé aujourd'hui", fmt(st.revenue), `${st.itemsSold} articles vendus`, 'hero')}
           ${kpi('Tickets', st.tickets, `Panier moyen ${fmt(st.avg)}`)}
-          ${kpi('En cours (non encaissé)', fmt(pending), `${open.orders.length} commande${open.orders.length > 1 ? 's' : ''} ouverte${open.orders.length > 1 ? 's' : ''}`)}
+          ${kpi('En cours (non encaissé)', fmt(pending), `${open.orders.length} commande${open.orders.length > 1 ? 's' : ''}${tabsCount ? ` · dont ${tabsCount} ardoise${tabsCount > 1 ? 's' : ''} : ${fmt(tabsTotal)}` : ''}`)}
           ${kpi('Annulations', st.cancelledOrders.count + st.cancelledLines.qty, `${fmt(st.cancelledOrders.amount + st.cancelledLines.amount)} retirés`)}
         </div>
         <section class="card"><h3>Tables</h3><div class="live-grid">

@@ -100,3 +100,19 @@ supabase/schema.sql   tables, sécurité, temps réel, données de départ
 
 - En mode cloud, la caisse a besoin d'internet pour enregistrer les ventes (pas de file d'attente hors-ligne pour l'instant).
 - Les caractères accentués sont imprimés sans accent (ex. « Cafe »), pour être compatibles avec toutes les imprimantes thermiques.
+
+## Compilation (compatibilité vieux navigateurs)
+
+L'appli est compilée en un seul fichier compatible avec **Chrome 51+** (tablettes Android 6/7 et plus), avec la librairie Supabase et les polyfills inclus : rien n'est téléchargé depuis un CDN au démarrage.
+
+Après toute modification de `js/` ou `css/` :
+
+```bash
+npm install
+```
+
+```bash
+npm run build
+```
+
+puis commitez aussi `dist/` (c'est ce que charge `index.html`).

@@ -1,0 +1,16 @@
+{
+  "name": "caisse-cafe",
+  "private": true,
+  "description": "Caisse café — compilation compatible avec les vieux navigateurs (Android/Chrome anciens)",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "2.118.0",
+    "abortcontroller-polyfill": "1.7.8",
+    "core-js": "3.47.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.12"
+  }
+}

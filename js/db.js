@@ -162,7 +162,8 @@ class LocalDB extends Emitter {
 // ── MODE CLOUD (Supabase) ────────────────────────────────────
 class CloudDB extends Emitter {
   async init() {
-    const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/+esm');
+    // Librairie incluse dans dist/app.js à la compilation (plus de téléchargement au démarrage)
+    const { createClient } = await import('@supabase/supabase-js');
     this.sb = createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY, {
       auth: { persistSession: true, autoRefreshToken: true },
     });

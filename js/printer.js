@@ -36,73 +36,175 @@ export function savePrinterSettings(s) {
 }
 
 // ── WebUSB ───────────────────────────────────────────────────
-let dev = null;
-let epOut = null;
+// L'imprimante n'est réservée (claimInterface) QUE le temps d'imprimer, puis
+// libérée. Avant, elle restait réservée dès l'ouverture de l'appli : un 2e onglet,
+// l'appli installée + Chrome, ou le back-office ouverts sur la même tablette
+// tombaient alors sur « Unable to claim interface ».
+const USB_KEY = 'caisse_usb_printer_v1';
+const isAndroid = /Android/i.test(navigator.userAgent);
+let dev = null; // imprimante autorisée et branchée (pas forcément ouverte)
+let queue = Promise.resolve(); // une seule opération USB à la fois
 
-async function setupDevice(device) {
-  if (!device.opened) await device.open();
-  if (!device.configuration) await device.selectConfiguration(1);
-  let found = null;
+function exclusive(fn) {
+  const run = queue.then(fn);
+  queue = run.catch(() => {});
+  return run;
+}
+
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+function rememberDevice(d) {
+  try {
+    localStorage.setItem(USB_KEY, JSON.stringify({ v: d.vendorId, p: d.productId, s: d.serialNumber || '' }));
+  } catch {}
+}
+
+function savedDevice() {
+  try {
+    return JSON.parse(localStorage.getItem(USB_KEY) || 'null');
+  } catch {
+    return null;
+  }
+}
+
+const hasPrinterClass = (d) =>
+  (d.configurations || []).some((c) => c.interfaces.some((i) => i.alternates.some((a) => a.interfaceClass === 7)));
+
+// Retrouve l'imprimante choisie la dernière fois (et pas le 1er appareil USB venu)
+async function findDevice() {
+  if (!navigator.usb) return null;
+  const list = await navigator.usb.getDevices();
+  const id = savedDevice();
+  const same = (d) => id && d.vendorId === id.v && d.productId === id.p;
+  return (
+    list.find((d) => same(d) && (d.serialNumber || '') === id.s) ||
+    list.find(same) ||
+    list.find(hasPrinterClass) ||
+    list[0] ||
+    null
+  );
+}
+
+// Sorties possibles (interface + point de sortie « bulk »), classe imprimante (7) d'abord
+function outputs(device) {
+  const out = [];
   for (const iface of device.configuration.interfaces) {
     for (const alt of iface.alternates) {
-      const out = alt.endpoints.find((e) => e.direction === 'out' && e.type === 'bulk');
-      // On préfère l'interface de classe « imprimante » (7)
-      if (out && (!found || alt.interfaceClass === 7)) {
-        found = { iface: iface.interfaceNumber, alt: alt.alternateSetting, ep: out.endpointNumber };
-      }
+      const ep = alt.endpoints.find((e) => e.direction === 'out' && e.type === 'bulk');
+      if (ep) out.push({ iface: iface.interfaceNumber, alt: alt.alternateSetting, ep: ep.endpointNumber, printer: alt.interfaceClass === 7 });
     }
   }
-  if (!found) throw new Error("Aucune sortie d'impression trouvée sur cet appareil USB.");
-  const iface = device.configuration.interfaces.find((i) => i.interfaceNumber === found.iface);
-  if (!iface.claimed) await device.claimInterface(found.iface);
-  if (found.alt) await device.selectAlternateInterface(found.iface, found.alt);
-  dev = device;
-  epOut = found.ep;
+  return out.sort((a, b) => b.printer - a.printer);
+}
+
+function busyError(cause) {
+  const msg = isAndroid
+    ? "L'imprimante est déjà utilisée par une autre appli ou un autre onglet. Fermez les autres onglets/fenêtres de la caisse et du back-office, " +
+      "fermez RawBT (ou l'appli du fabricant), débranchez puis rebranchez l'imprimante et réessayez. Si ça persiste, choisissez le mode « Application RawBT »."
+    : "L'ordinateur réserve déjà l'imprimante pour son propre pilote (Windows/Mac) : le mode USB direct n'est pas possible ici. " +
+      'Sur ordinateur, choisissez le mode « Impression Android / Chrome ».';
+  const e = new Error(msg);
+  e.cause = cause;
+  return e;
+}
+
+async function closePrinter(device, out) {
+  try {
+    if (out) await device.releaseInterface(out.iface);
+  } catch {}
+  try {
+    if (device.opened) await device.close();
+  } catch {}
+}
+
+async function tryOpen(device) {
+  try {
+    if (!device.opened) await device.open();
+  } catch (e) {
+    if (e.name === 'SecurityError') throw new Error("Accès à l'imprimante refusé : débranchez-la, rebranchez-la et acceptez la demande d'autorisation.");
+    throw busyError(e);
+  }
+  if (!device.configuration) await device.selectConfiguration(device.configurations[0]?.configurationValue || 1);
+  const list = outputs(device);
+  if (!list.length) throw new Error("Cet appareil USB n'est pas une imprimante. Touchez « Connecter l'imprimante USB » et choisissez la bonne dans la liste.");
+  let last = null;
+  for (const o of list) {
+    try {
+      await device.claimInterface(o.iface);
+      if (o.alt) await device.selectAlternateInterface(o.iface, o.alt);
+      return o;
+    } catch (e) {
+      last = e;
+      try { await device.releaseInterface(o.iface); } catch {}
+    }
+  }
+  throw busyError(last);
+}
+
+// Ouvre et réserve l'imprimante (2e essai après fermeture complète si elle est occupée)
+async function openPrinter(device) {
+  try {
+    return await tryOpen(device);
+  } catch (e) {
+    if (!e.cause) throw e;
+    await closePrinter(device, null);
+    await wait(600);
+    return tryOpen(device);
+  }
 }
 
 export async function connectUsbPrinter() {
   if (!navigator.usb) throw new Error('WebUSB indisponible : utilisez Chrome sur Android, sur une adresse https://');
   const device = await navigator.usb.requestDevice({ filters: [] });
-  await setupDevice(device);
+  dev = device;
+  rememberDevice(device);
+  // Vérifie tout de suite qu'on peut l'utiliser, puis la libère
+  await exclusive(async () => {
+    let out = null;
+    try {
+      out = await openPrinter(device);
+    } finally {
+      await closePrinter(device, out);
+    }
+  });
   return device.productName || 'Imprimante USB';
 }
 
-async function ensureUsb() {
-  if (dev?.opened) return;
-  const devices = (await navigator.usb?.getDevices()) || [];
-  if (!devices.length) throw new Error('Aucune imprimante USB autorisée. Ouvrez « Imprimante » puis « Connecter l’imprimante USB ».');
-  await setupDevice(devices[0]);
-}
-
-export const usbPrinterName = () => (dev?.opened ? dev.productName || 'Imprimante USB' : null);
+export const usbPrinterName = () => (dev ? dev.productName || 'Imprimante USB' : null);
 
 if (navigator.usb) {
   navigator.usb.addEventListener('disconnect', (e) => {
     if (e.device === dev) dev = null;
   });
   navigator.usb.addEventListener('connect', () => {
-    if (getPrinterSettings().mode === 'usb') ensureUsb().catch(() => {});
+    if (!dev) findDevice().then((d) => (dev = d)).catch(() => {});
   });
-  // Reconnexion silencieuse au démarrage (appareil déjà autorisé)
-  if (getPrinterSettings().mode === 'usb') ensureUsb().catch(() => {});
+  // Au démarrage : on repère l'imprimante déjà autorisée, SANS la réserver
+  findDevice().then((d) => (dev = dev || d)).catch(() => {});
 }
 
-async function sendUsb(bytes) {
+function sendUsb(bytes) {
   const CHUNK = 1024;
-  for (let attempt = 0; attempt < 2; attempt++) {
+  return exclusive(async () => {
+    if (!navigator.usb) throw new Error('WebUSB indisponible : utilisez Chrome sur Android, sur une adresse https://');
+    const device = dev || (dev = await findDevice());
+    if (!device) throw new Error('Aucune imprimante USB autorisée. Ouvrez « Imprimante » puis « Connecter l’imprimante USB ».');
+    let out = null;
     try {
-      await ensureUsb();
+      out = await openPrinter(device);
       for (let i = 0; i < bytes.length; i += CHUNK) {
-        const r = await dev.transferOut(epOut, bytes.slice(i, i + CHUNK));
+        let r;
+        try {
+          r = await device.transferOut(out.ep, bytes.slice(i, i + CHUNK));
+        } catch {
+          throw new Error("L'imprimante ne répond pas : vérifiez qu'elle est allumée, bien branchée et qu'elle a du papier.");
+        }
         if (r.status !== 'ok') throw new Error(`Transfert USB : ${r.status}`);
       }
-      return;
-    } catch (err) {
-      try { await dev?.close(); } catch {}
-      dev = null;
-      if (attempt === 1) throw err;
+    } finally {
+      await closePrinter(device, out);
     }
-  }
+  });
 }
 
 // ── RawBT ────────────────────────────────────────────────────
@@ -173,7 +275,7 @@ export async function openPrinterSettings(settings) {
       <div class="usb-zone">
         <p class="hint">Branchez l'imprimante (câble OTG), puis touchez le bouton et choisissez-la dans la liste.</p>
         <button class="btn" type="button" id="pusb">Connecter l'imprimante USB</button>
-        <span class="muted" id="pusb-st">${esc(usbPrinterName() || (navigator.usb ? 'Non connectée' : 'WebUSB indisponible sur ce navigateur'))}</span>
+        <span class="muted" id="pusb-st">${esc((usbPrinterName() && `Imprimante : ${usbPrinterName()}`) || (navigator.usb ? 'Non connectée' : 'WebUSB indisponible sur ce navigateur'))}</span>
       </div>
       <p class="hint rawbt-zone">Installez « RawBT » depuis le Play Store, réglez-y votre imprimante USB, puis revenez ici.</p>
       <div class="row2">

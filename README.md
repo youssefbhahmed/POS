@@ -59,6 +59,7 @@ Le plus simple, avec ce dépôt GitHub : **Settings → Pages → Deploy from a 
 4. Dans la caisse, touchez le bouton **🖨** en haut → mode **USB direct** → **Connecter l'imprimante USB** → choisissez-la → **Imprimer un test**.
 
 **Si l'imprimante n'apparaît pas ou n'imprime pas** en USB direct :
+- message « Unable to claim interface » / « imprimante déjà utilisée » : une autre appli (RawBT, appli du fabricant) ou un autre onglet/fenêtre de la caisse tient l'imprimante. Fermez-les, débranchez/rebranchez l'imprimante et réessayez. Sur un **ordinateur** Windows/Mac, c'est le pilote du système qui la tient : utilisez le mode **Impression Android / Chrome** ;
 - installez l'application **RawBT** (Play Store), configurez-y votre imprimante USB, puis choisissez le mode **Application RawBT** dans la caisse ;
 - ou, si un pilote d'impression Android est installé pour votre imprimante, choisissez **Impression Android / Chrome**.
 
